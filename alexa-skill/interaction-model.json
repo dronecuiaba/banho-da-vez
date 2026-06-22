@@ -1,0 +1,47 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "banho da vez",
+      "intents": [
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        },
+        {
+          "name": "QuemTomaBanhoIntent",
+          "slots": [],
+          "samples": [
+            "quem toma banho hoje",
+            "quem toma banho",
+            "quem é a vez do banho",
+            "quem é a vez de tomar banho",
+            "de quem é a vez do banho",
+            "de quem é a vez",
+            "qual criança toma banho hoje",
+            "qual é a vez do banho",
+            "quem banha hoje",
+            "quem vai tomar banho hoje",
+            "quem vai tomar banho"
+          ]
+        }
+      ],
+      "types": []
+    }
+  }
+}
