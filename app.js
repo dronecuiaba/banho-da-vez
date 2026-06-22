@@ -1,28 +1,69 @@
-// Estado persistido em localStorage
-const STORAGE_KEY = "banho-da-vez-state";
+// Estado persistido no Firestore (compartilhado entre dispositivos)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  onSnapshot,
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { children: [], startDate: null, startChildId: null };
-    return JSON.parse(raw);
-  } catch (e) {
-    return { children: [], startDate: null, startChildId: null };
-  }
-}
+const firebaseConfig = {
+  apiKey: "AIzaSyAC7zRbVRcNN6fYQJ2Jgm85SsoEyYuDOcY",
+  authDomain: "banho-da-vez.firebaseapp.com",
+  projectId: "banho-da-vez",
+  storageBucket: "banho-da-vez.firebasestorage.app",
+  messagingSenderId: "361168414844",
+  appId: "1:361168414844:web:ab28e3a157634d8b9e01f9",
+};
 
-function saveState(state) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
+const stateRef = doc(db, "banho", "state");
 
-let state = loadState();
+let state = { children: [], startDate: null, startChildId: null };
 
-// view atual: "children" | "start" | "dashboard" | "manage"
-let view = state.children.length === 0
-  ? "children"
-  : (!state.startDate ? "start" : "dashboard");
+// view atual: "loading" | "children" | "start" | "dashboard" | "manage"
+let view = "loading";
+let hasLoadedOnce = false;
+let syncError = false;
 
 const app = document.getElementById("app");
+
+render();
+
+function persist() {
+  setDoc(stateRef, state).catch(err => {
+    console.error("Erro ao salvar no Firestore:", err);
+    syncError = true;
+    render();
+  });
+}
+
+onSnapshot(
+  stateRef,
+  snap => {
+    syncError = false;
+    state = snap.exists()
+      ? snap.data()
+      : { children: [], startDate: null, startChildId: null };
+    if (!hasLoadedOnce) {
+      hasLoadedOnce = true;
+      view = state.children.length === 0
+        ? "children"
+        : (!state.startDate ? "start" : "dashboard");
+    }
+    render();
+  },
+  err => {
+    console.error("Erro ao sincronizar com Firestore:", err);
+    syncError = true;
+    if (!hasLoadedOnce) {
+      hasLoadedOnce = true;
+      view = "error";
+    }
+    render();
+  }
+);
 
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -77,10 +118,35 @@ function initials(name) {
 
 function render() {
   app.innerHTML = "";
-  if (view === "children") renderChildrenSetup();
+  if (view === "loading") renderLoading();
+  else if (view === "error") renderError();
+  else if (view === "children") renderChildrenSetup();
   else if (view === "start") renderStartSetup();
   else if (view === "dashboard") renderDashboard();
   else if (view === "manage") renderManage();
+}
+
+function renderSyncBanner(wrap) {
+  if (syncError) {
+    wrap.appendChild(el("p", { class: "subtitle", text: "⚠️ Sem conexão com o servidor. Tentando reconectar..." }));
+  }
+}
+
+function renderError() {
+  const wrap = el("div");
+  wrap.appendChild(el("h1", { text: "Banho da Vez" }));
+  wrap.appendChild(el("p", { class: "subtitle", text: "⚠️ Não foi possível conectar ao servidor. Verifique sua internet ou tente novamente em instantes." }));
+  const retryBtn = el("button", { class: "btn-primary", text: "Tentar novamente" });
+  retryBtn.addEventListener("click", () => location.reload());
+  wrap.appendChild(retryBtn);
+  app.appendChild(wrap);
+}
+
+function renderLoading() {
+  const wrap = el("div");
+  wrap.appendChild(el("h1", { text: "Banho da Vez" }));
+  wrap.appendChild(el("p", { class: "subtitle", text: "Carregando..." }));
+  app.appendChild(wrap);
 }
 
 function el(tag, opts = {}, children = []) {
@@ -116,7 +182,7 @@ function renderChildrenSetup() {
       removeBtn.addEventListener("click", () => {
         state.children = state.children.filter(c => c.id !== child.id);
         if (state.startChildId === child.id) state.startChildId = null;
-        saveState(state);
+        persist();
         render();
       });
       row.appendChild(nameWrap);
@@ -133,7 +199,7 @@ function renderChildrenSetup() {
     const name = input.value.trim();
     if (!name) return;
     state.children.push({ id: uid(), name });
-    saveState(state);
+    persist();
     input.value = "";
     render();
   }
@@ -193,7 +259,7 @@ function renderStartSetup() {
   confirmBtn.addEventListener("click", () => {
     state.startChildId = selected;
     state.startDate = todayISO();
-    saveState(state);
+    persist();
     view = "dashboard";
     render();
   });
@@ -214,6 +280,7 @@ function renderDashboard() {
   const wrap = el("div");
   wrap.appendChild(el("h1", { text: "Banho da Vez" }));
   wrap.appendChild(el("p", { class: "subtitle", text: "Quem toma banho hoje" }));
+  renderSyncBanner(wrap);
 
   const today = todayISO();
   const child = childForDate(today);
@@ -274,7 +341,7 @@ function renderManage() {
         state.startChildId = state.children[0].id;
         state.startDate = todayISO();
       }
-      saveState(state);
+      persist();
       render();
     });
     row.appendChild(nameWrap);
@@ -290,7 +357,7 @@ function renderManage() {
     const name = input.value.trim();
     if (!name) return;
     state.children.push({ id: uid(), name });
-    saveState(state);
+    persist();
     input.value = "";
     render();
   }
@@ -308,5 +375,3 @@ function renderManage() {
 
   app.appendChild(wrap);
 }
-
-render();

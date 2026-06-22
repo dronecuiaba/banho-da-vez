@@ -1,4 +1,4 @@
-const CACHE_NAME = "banho-da-vez-v1";
+const CACHE_NAME = "banho-da-vez-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -26,6 +26,15 @@ self.addEventListener("activate", event => {
 });
 
 self.addEventListener("fetch", event => {
+  const url = new URL(event.request.url);
+  const isSameOrigin = url.origin === self.location.origin;
+  const isOwnAsset = isSameOrigin && ASSETS.some(a => url.pathname.endsWith(a.replace("./", "")));
+
+  // Só intercepta os próprios arquivos estáticos. Tudo que for de outra
+  // origem (Firebase/Firestore, CDNs) passa direto pela rede, sem cache,
+  // para não quebrar a sincronização em tempo real.
+  if (event.request.method !== "GET" || !isOwnAsset) return;
+
   event.respondWith(
     caches.match(event.request).then(cached => {
       const fetchPromise = fetch(event.request)
