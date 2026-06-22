@@ -1,9 +1,35 @@
 // Lambda da skill Alexa "Banho da Vez".
 // Lê o mesmo documento Firestore usado pelo app web e responde quem toma banho hoje.
-// Runtime: Node.js 18.x ou superior (usa fetch nativo, sem dependências externas).
+// Usa o módulo https nativo (sem dependências externas) para funcionar em qualquer
+// versão do Node.js, inclusive runtimes antigos sem fetch global.
 
-const FIRESTORE_URL =
-  "https://firestore.googleapis.com/v1/projects/banho-da-vez/databases/(default)/documents/banho/state";
+const https = require("https");
+
+const FIRESTORE_HOST = "firestore.googleapis.com";
+const FIRESTORE_PATH =
+  "/v1/projects/banho-da-vez/databases/(default)/documents/banho/state";
+
+function fetchJSON(host, path) {
+  return new Promise((resolve, reject) => {
+    const req = https.get({ host, path, headers: { Accept: "application/json" } }, res => {
+      let body = "";
+      res.on("data", chunk => { body += chunk; });
+      res.on("end", () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          reject(new Error(`Firestore respondeu ${res.statusCode}: ${body}`));
+          return;
+        }
+        try {
+          resolve(JSON.parse(body));
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+    req.on("error", reject);
+    req.setTimeout(8000, () => req.destroy(new Error("Timeout ao consultar Firestore")));
+  });
+}
 
 function todayISOBrasil() {
   const fmt = new Intl.DateTimeFormat("en-CA", {
@@ -44,9 +70,7 @@ function childForToday(state) {
 }
 
 async function getTodayChildName() {
-  const resp = await fetch(FIRESTORE_URL);
-  if (!resp.ok) throw new Error(`Firestore respondeu ${resp.status}`);
-  const doc = await resp.json();
+  const doc = await fetchJSON(FIRESTORE_HOST, FIRESTORE_PATH);
   if (!doc.fields) return null; // documento ainda não configurado
   const state = parseFirestoreDoc(doc);
   const child = childForToday(state);
